@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3GPP TS 38.101-5 LEO Satellite Simulator</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- ECharts CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <!-- Three.js and OrbitControls CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="leo-simulator.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Controls -->
+        <aside class="control-panel">
+            <div class="sidebar-header">
+                <a href="index.html" class="back-link">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Studios
+                </a>
+                <h2>LEO SIMULATOR</h2>
+                <div class="subtitle-spec">3GPP TS 38.101-5 NTN</div>
+            </div>
+
+            <div class="panel-section">
+                <h3><i class="fa-solid fa-satellite"></i> Orbital Controls</h3>
+                <div class="control-group">
+                    <div class="btn-row">
+                        <button id="play-pause-btn" class="btn primary btn-iconic">
+                            <i class="fa-solid fa-pause"></i> <span id="play-btn-text">Pause</span>
+                        </button>
+                        <button id="reset-btn" class="btn secondary btn-iconic">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>Orbit Time (s)</span>
+                        <span id="orbit-time-val" class="mono">0.0s</span>
+                    </div>
+                    <input type="range" id="orbit-time-slider" min="-100" max="100" step="0.5" value="0">
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3><i class="fa-solid fa-wave-square"></i> Module 1: Doppler & Sync</h3>
+                <div class="control-group toggle-group">
+                    <span>UE Pre-compensation</span>
+                    <label class="switch">
+                        <input type="checkbox" id="doppler-precomp" checked>
+                        <span class="slider-toggle"></span>
+                    </label>
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>GNSS Velocity Error</span>
+                        <span id="velocity-error-val" class="mono">0.0 m/s</span>
+                    </div>
+                    <input type="range" id="velocity-error-slider" min="0" max="50" step="0.5" value="0">
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3><i class="fa-solid fa-signal"></i> Module 2: Link Budget</h3>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>Rain / Atmospheric Loss</span>
+                        <span id="rain-loss-val" class="mono">0.0 dB</span>
+                    </div>
+                    <input type="range" id="rain-loss-slider" min="0" max="20" step="0.5" value="0">
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3><i class="fa-solid fa-clock"></i> Module 3: Timing Advance</h3>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>Timing Advance (TA)</span>
+                        <span id="ta-val" class="mono">4.00 ms</span>
+                    </div>
+                    <input type="range" id="ta-slider" min="3.5" max="13.5" step="0.01" value="4.0">
+                </div>
+                <div class="control-group" style="margin-top: 0.5rem;">
+                    <div class="info-row">
+                        <span>Required RTT:</span>
+                        <span id="required-rtt-info" class="mono">4.00 ms</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3><i class="fa-solid fa-network-wired"></i> Module 4: Phased Array</h3>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>X 軸天線數量 (Columns)</span>
+                        <span id="array-cols-val" class="mono">16</span>
+                    </div>
+                    <input type="range" id="array-cols-slider" min="1" max="32" step="1" value="16">
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>Y 軸天線數量 (Rows)</span>
+                        <span id="array-rows-val" class="mono">16</span>
+                    </div>
+                    <input type="range" id="array-rows-slider" min="1" max="32" step="1" value="16">
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>單一天線輸出功率 (Tx Power)</span>
+                        <span id="tx-power-val" class="mono">10.0 dBm</span>
+                    </div>
+                    <input type="range" id="tx-power-slider" min="-10.0" max="20.0" step="0.5" value="10.0">
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>Element Spacing (d/λ)</span>
+                        <span id="spacing-val" class="mono">0.50</span>
+                    </div>
+                    <input type="range" id="spacing-slider" min="0.2" max="2.0" step="0.05" value="0.5">
+                </div>
+                <div class="control-group toggle-group">
+                    <span>Auto-Track Satellite</span>
+                    <label class="switch">
+                        <input type="checkbox" id="autotrack-toggle" checked>
+                        <span class="slider-toggle"></span>
+                    </label>
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>Steering Angle (θ₀)</span>
+                        <span id="steering-val" class="mono">0.0°</span>
+                    </div>
+                    <input type="range" id="steering-slider" min="-60" max="60" step="1" value="0">
+                </div>
+                <div class="control-group toggle-group">
+                    <span>Taylor Window</span>
+                    <label class="switch">
+                        <input type="checkbox" id="taylor-toggle">
+                        <span class="slider-toggle"></span>
+                    </label>
+                </div>
+                <div class="control-group" style="margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.5rem;">
+                    <div class="info-row" style="border-left-color: var(--neon-cyan);">
+                        <span>Total Elements (N):</span>
+                        <span id="total-elements-info" class="mono">256</span>
+                    </div>
+                    <div class="info-row" style="border-left-color: var(--neon-green); margin-top: 0.25rem;">
+                        <span>Peak EIRP:</span>
+                        <span id="peak-eirp-info" class="mono">58.16 dBm</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Dashboard View -->
+        <main class="dashboard-grid">
+            <!-- Master Tracker Panel -->
+            <section class="card-eda master-tracker-card" id="mod-tracker">
+                <header class="card-eda-header">
+                    <div class="module-title">
+                        <i class="fa-solid fa-earth-americas" style="color: var(--neon-cyan);"></i>
+                        <h4>Global Orbital Tracker (God's Eye Master View)</h4>
+                    </div>
+                    <div class="status-badge pass" id="badge-tracker">
+                        <i class="fa-solid fa-circle-check"></i> Satellite Connected
+                    </div>
+                </header>
+                <div class="card-eda-content flex-row" style="position: relative; padding: 0;">
+                    <canvas id="canvas-tracker" style="width: 100%; height: 100%; display: block;"></canvas>
+                </div>
+            </section>
+
+            <!-- Module 1: Extreme Doppler Shift -->
+            <section class="card-eda" id="mod-doppler">
+                <header class="card-eda-header">
+                    <div class="module-title">
+                        <span class="badge badge-number">01</span>
+                        <h4>Extreme Doppler Shift &amp; Pre-compensation</h4>
+                    </div>
+                    <div class="status-badge" id="badge-doppler">
+                        <i class="fa-solid fa-circle-check"></i> PASS: Frequency Synced
+                    </div>
+                </header>
+                <div class="card-eda-content">
+                    <div id="chart-doppler" class="chart-container"></div>
+                    <div class="telemetry-grid">
+                        <div class="tel-item">
+                            <span class="tel-label">Ideal Doppler</span>
+                            <span class="tel-val text-cyan" id="tel-ideal-doppler">0.00 kHz</span>
+                        </div>
+                        <div class="tel-item">
+                            <span class="tel-label">Pre-compensation</span>
+                            <span class="tel-val text-cyan" id="tel-comp-doppler">0.00 kHz</span>
+                        </div>
+                        <div class="tel-item">
+                            <span class="tel-label">Residual Error</span>
+                            <span class="tel-val text-yellow" id="tel-residual-doppler">0.00 Hz</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Module 2: Dynamic Link Budget -->
+            <section class="card-eda" id="mod-link">
+                <header class="card-eda-header">
+                    <div class="module-title">
+                        <span class="badge badge-number">02</span>
+                        <h4>Dynamic Link Budget &amp; FSPL</h4>
+                    </div>
+                    <div class="status-badge" id="badge-link">
+                        <i class="fa-solid fa-circle-check"></i> PASS: Link Margin OK
+                    </div>
+                </header>
+                <div class="card-eda-content flex-row">
+                    <div id="chart-gauge-link" class="chart-container half-width"></div>
+                    <div class="info-details half-width">
+                        <div class="telemetry-vertical">
+                            <div class="tel-item-v">
+                                <span class="tel-label">Elevation Angle</span>
+                                <span class="tel-val text-orange" id="tel-elevation">90.0°</span>
+                            </div>
+                            <div class="tel-item-v">
+                                <span class="tel-label">Slant Range</span>
+                                <span class="tel-val text-orange" id="tel-slant-range">600.0 km</span>
+                            </div>
+                            <div class="tel-item-v">
+                                <span class="tel-label">Free Space Path Loss (FSPL)</span>
+                                <span class="tel-val text-orange" id="tel-fspl">154.0 dB</span>
+                            </div>
+                            <div class="tel-item-v">
+                                <span class="tel-label">Link Margin</span>
+                                <span class="tel-val text-green" id="tel-margin">+6.0 dB</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Module 3: Timing Advance -->
+            <section class="card-eda" id="mod-timing">
+                <header class="card-eda-header">
+                    <div class="module-title">
+                        <span class="badge badge-number">03</span>
+                        <h4>Large RTT &amp; Timing Advance (TA)</h4>
+                    </div>
+                    <div class="status-badge" id="badge-timing">
+                        <i class="fa-solid fa-circle-check"></i> PASS: Timing Synced
+                    </div>
+                </header>
+                <div class="card-eda-content flex-column">
+                    <div class="timeline-visual-container">
+                        <canvas id="canvas-timing"></canvas>
+                    </div>
+                    <div class="telemetry-grid">
+                        <div class="tel-item">
+                            <span class="tel-label">Round Trip Time (RTT)</span>
+                            <span class="tel-val text-magenta" id="tel-rtt">4.00 ms</span>
+                        </div>
+                        <div class="tel-item">
+                            <span class="tel-label">Timing Advance (TA)</span>
+                            <span class="tel-val text-magenta" id="tel-ta">4.00 ms</span>
+                        </div>
+                        <div class="tel-item">
+                            <span class="tel-label">Timing Offset</span>
+                            <span class="tel-val text-yellow" id="tel-timing-offset">0.00 ms</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Module 4: Phased Array & Off-axis Mask -->
+            <section class="card-eda" id="mod-phased">
+                <header class="card-eda-header">
+                    <div class="module-title">
+                        <span class="badge badge-number">04</span>
+                        <h4>3D Spatial Radiation &amp; 2D Off-axis Mask</h4>
+                    </div>
+                    <div class="status-badge" id="badge-phased">
+                        <i class="fa-solid fa-circle-check"></i> PASS: Off-axis Emission OK
+                    </div>
+                </header>
+                <div class="card-eda-content flex-row">
+                    <div class="half-width visual-3d-wrapper">
+                        <div class="visual-3d-title">3D UE Spherical EIRP Heatmap</div>
+                        <div id="webgl-container"></div>
+                        <div class="visual-3d-hint">Drag to rotate, Scroll to zoom</div>
+                    </div>
+                    <div class="half-width flex-column" style="position: relative;">
+                        <div class="eirp-card" id="eirp-card">
+                            <div class="eirp-card-label">Peak EIRP</div>
+                            <div class="eirp-card-value" id="eirp-card-val">58.16 dBm</div>
+                        </div>
+                        <div id="chart-mask" class="chart-container" style="height: 100%;"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Script File -->
+    <script src="leo-simulator.js"></script>
+</body>
+</html>
