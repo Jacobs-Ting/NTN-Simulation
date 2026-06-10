@@ -71,10 +71,36 @@
                 <h3><i class="fa-solid fa-signal"></i> Module 2: Link Budget</h3>
                 <div class="control-group">
                     <div class="slider-label">
+                        <span>Channel Bandwidth</span>
+                        <span id="bw-val" class="mono">10 MHz</span>
+                    </div>
+                    <select id="bw-select" class="control-select">
+                        <option value="5">5 MHz</option>
+                        <option value="10" selected>10 MHz</option>
+                        <option value="15">15 MHz</option>
+                        <option value="20">20 MHz</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>Sat Rx Antenna Peak Gain</span>
+                        <span id="sat-rx-gain-val" class="mono">28.0 dBi</span>
+                    </div>
+                    <input type="range" id="sat-rx-gain-slider" min="0" max="50" step="0.1" value="28.0">
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
                         <span>Rain / Atmospheric Loss</span>
                         <span id="rain-loss-val" class="mono">0.0 dB</span>
                     </div>
                     <input type="range" id="rain-loss-slider" min="0" max="20" step="0.5" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="slider-label">
+                        <span>Pointing Error (θ_error)</span>
+                        <span id="pointing-error-val" class="mono">0.0°</span>
+                    </div>
+                    <input type="range" id="pointing-error-slider" min="0" max="10" step="0.1" value="0">
                 </div>
             </div>
 
@@ -155,6 +181,10 @@
                         <span>Peak EIRP:</span>
                         <span id="peak-eirp-info" class="mono">58.16 dBm</span>
                     </div>
+                    <div class="info-row" style="border-left-color: var(--neon-yellow); margin-top: 0.25rem;">
+                        <span>Estimated HPBW:</span>
+                        <span id="hpbw-info" class="mono">6.4°</span>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -233,6 +263,22 @@
                             <div class="tel-item-v">
                                 <span class="tel-label">Free Space Path Loss (FSPL)</span>
                                 <span class="tel-val text-orange" id="tel-fspl">154.0 dB</span>
+                            </div>
+                            <div class="tel-item-v">
+                                <span class="tel-label">Peak EIRP</span>
+                                <span class="tel-val text-cyan" id="tel-eirp">58.2 dBm</span>
+                            </div>
+                            <div class="tel-item-v">
+                                <span class="tel-label">Pointing Loss</span>
+                                <span class="tel-val text-muted" id="tel-pointing-loss">0.0 dB</span>
+                            </div>
+                            <div class="tel-item-v">
+                                <span class="tel-label">Effective EIRP</span>
+                                <span class="tel-val text-cyan" id="tel-effective-eirp">58.2 dBm</span>
+                            </div>
+                            <div class="tel-item-v">
+                                <span class="tel-label">Rx Level</span>
+                                <span class="tel-val text-cyan" id="tel-rx-level">-98.0 dBm</span>
                             </div>
                             <div class="tel-item-v">
                                 <span class="tel-label">Link Margin</span>

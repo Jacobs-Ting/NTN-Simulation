@@ -47,6 +47,9 @@ window.addEventListener('DOMContentLoaded', () => {
     let velocityError = 0.0; // m/s
     let precompensationOn = true;
     let rainLoss = 0.0; // dB
+    let channelBW_MHz = 10; // Channel Bandwidth in MHz
+    let satRxGainValue = 28.0; // dBi (Satellite Rx Antenna Peak Gain)
+    let pointingError = 0.0; // degrees (mechanical pointing error)
     let selectedTA = 4.0; // ms (Timing Advance)
     let animationFrameId = null;
     
@@ -64,6 +67,13 @@ window.addEventListener('DOMContentLoaded', () => {
     
     const rainSlider = document.getElementById('rain-loss-slider');
     const rainVal = document.getElementById('rain-loss-val');
+    const bwSelect = document.getElementById('bw-select');
+    const bwVal = document.getElementById('bw-val');
+    const satRxGainSlider = document.getElementById('sat-rx-gain-slider');
+    const satRxGainValEl = document.getElementById('sat-rx-gain-val');
+    const pointingErrorSlider = document.getElementById('pointing-error-slider');
+    const pointingErrorValEl = document.getElementById('pointing-error-val');
+    const hpbwInfo = document.getElementById('hpbw-info');
     
     const taSlider = document.getElementById('ta-slider');
     const taVal = document.getElementById('ta-val');
@@ -104,6 +114,10 @@ window.addEventListener('DOMContentLoaded', () => {
     const telElevation = document.getElementById('tel-elevation');
     const telSlantRange = document.getElementById('tel-slant-range');
     const telFspl = document.getElementById('tel-fspl');
+    const telEirp = document.getElementById('tel-eirp');
+    const telPointingLoss = document.getElementById('tel-pointing-loss');
+    const telEffectiveEirp = document.getElementById('tel-effective-eirp');
+    const telRxLevel = document.getElementById('tel-rx-level');
     const telMargin = document.getElementById('tel-margin');
     const telRtt = document.getElementById('tel-rtt');
     const telTa = document.getElementById('tel-ta');
@@ -186,21 +200,24 @@ window.addEventListener('DOMContentLoaded', () => {
     const linkChart = echarts.init(document.getElementById('chart-gauge-link'));
     const linkOption = {
         backgroundColor: 'transparent',
+        animationDurationUpdate: 0,
         series: [{
             type: 'gauge',
             center: ['50%', '55%'],
             startAngle: 200,
             endAngle: -20,
             min: -10,
-            max: 20,
-            splitNumber: 6,
+            max: 40,
+            splitNumber: 10,
             radius: '90%',
+            animationDurationUpdate: 0,
             axisLine: {
                 lineStyle: {
                     width: 8,
                     color: [
-                        [0.33, '#ef4444'], // -10 to 0
-                        [1, '#10b981']     // 0 to 20
+                        [0.2, '#ef4444'],  // -10 to 0 (deficit)
+                        [0.4, '#f59e0b'],  //  0 to 10 (marginal)
+                        [1, '#10b981']     // 10 to 40 (good)
                     ]
                 }
             },
@@ -210,7 +227,7 @@ window.addEventListener('DOMContentLoaded', () => {
             axisLabel: { color: '#94a3b8', distance: 12, fontSize: 10, formatter: '{value}' },
             anchor: { show: true, showAbove: true, size: 12, itemStyle: { color: '#f8fafc' } },
             title: { show: true, offsetCenter: [0, '35%'], textStyle: { color: '#94a3b8', fontSize: 11, fontWeight: 500 } },
-            detail: { valueAnimation: true, offsetCenter: [0, '-15%'], formatter: '{value} dB', textStyle: { color: '#10b981', fontSize: 18, fontWeight: 'bold', fontFamily: 'JetBrains Mono' } },
+            detail: { valueAnimation: false, offsetCenter: [0, '-15%'], formatter: '{value} dB', textStyle: { color: '#10b981', fontSize: 18, fontWeight: 'bold', fontFamily: 'JetBrains Mono' } },
             data: [{ value: 6.0, name: 'Link Margin' }]
         }]
     };
@@ -625,6 +642,11 @@ window.addEventListener('DOMContentLoaded', () => {
         peakEirpInfo.textContent = peakEirp.toFixed(2) + ' dBm';
         eirpCardVal.textContent = peakEirp.toFixed(2) + ' dBm';
         
+        // Update Estimated HPBW
+        const N_max = Math.max(Nx, Ny);
+        const hpbwDeg = 102.0 / N_max;
+        hpbwInfo.textContent = hpbwDeg.toFixed(1) + '°';
+        
         // Taylor window coefficients or uniform weights
         let wx = taylorOn ? getTaylorWeights(Nx, -30, 4) : new Array(Nx).fill(1);
         let wy = taylorOn ? getTaylorWeights(Ny, -30, 4) : new Array(Ny).fill(1);
@@ -877,13 +899,46 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         
         // 3. Link Budget & FSPL (Module 2)
-        const fspl = 20 * Math.log10(d_sat) + 20 * Math.log10(fc / 1.0e6) - 27.55; // alternative standard FSPL formula using km/MHz
+        // ITU standard FSPL: FSPL(dB) = 20*log10(d_km) + 20*log10(f_MHz) + 32.44
+        const f_MHz = 2000; // S-band carrier frequency in MHz
+        const fspl = 20 * Math.log10(d_sat) + 20 * Math.log10(f_MHz) + 32.44;
         
-        // EIRP, Noise, SNR params
-        const satEirp = 62.0; // dBm (LEO satellite beam)
-        const noiseFloor = -102.0; // dBm
-        const requiredSnr = 4.0; // dB
-        const margin = satEirp - fspl - rainLoss - noiseFloor - requiredSnr;
+        // Satellite Receiver Constants
+        const satRxGain = satRxGainValue;  // dBi (from slider)
+        const satNoiseFigure = 2.0;   // dB
+        const requiredSNR = 0.0;      // dB (Minimum SNR to maintain link)
+        const atmosphericLoss = 2.0;  // dB (gaseous absorption + scintillation)
+        
+        // a) Peak EIRP from Module 4 Phased Array settings
+        const Nx_link = parseInt(arrayColsSlider.value);
+        const Ny_link = parseInt(arrayRowsSlider.value);
+        const conductedTxPower_link = parseFloat(txPowerSlider.value);
+        const N_link = Nx_link * Ny_link;
+        const eirp = conductedTxPower_link + 20 * Math.log10(N_link);
+        
+        // Step A: Calculate Beamwidth (HPBW)
+        const N_max_link = Math.max(Nx_link, Ny_link);
+        const hpbwDeg_link = 102.0 / N_max_link;
+        
+        // Step B: Calculate Pointing Loss (Gaussian Main Beam Approximation)
+        let pointingLoss = 12.0 * Math.pow(pointingError / hpbwDeg_link, 2);
+        pointingLoss = Math.min(pointingLoss, 30.0); // clamp max 30 dB
+        
+        // Step C: Effective EIRP
+        const effectiveEirp = eirp - pointingLoss;
+        
+        // b) Rx Level (Received Power at Satellite)
+        const rxLevel = effectiveEirp - fspl - atmosphericLoss - rainLoss + satRxGain;
+        
+        // c) Receiver Noise Floor (based on BW)
+        const bwHz = channelBW_MHz * 1e6;
+        const noiseFloor = -174 + 10 * Math.log10(bwHz) + satNoiseFigure;
+        
+        // d) Receiver Sensitivity
+        const sensitivity = noiseFloor + requiredSNR;
+        
+        // e) Link Margin
+        const margin = rxLevel - sensitivity;
         
         // 4. Large RTT & Timing Advance (Module 3)
         const rtt = 2 * (d_sat * 1000) / c * 1000; // in ms
@@ -908,6 +963,24 @@ window.addEventListener('DOMContentLoaded', () => {
         telElevation.textContent = elevationDeg.toFixed(1) + '°';
         telSlantRange.textContent = d_sat.toFixed(1) + ' km';
         telFspl.textContent = fspl.toFixed(1) + ' dB';
+        
+        telEirp.textContent = eirp.toFixed(1) + ' dBm';
+        
+        // Pointing Loss display
+        telPointingLoss.textContent = '-' + pointingLoss.toFixed(1) + ' dB';
+        if (pointingLoss > 3.0) {
+            telPointingLoss.className = "tel-val text-red";
+        } else if (pointingLoss > 0.0) {
+            telPointingLoss.className = "tel-val text-yellow";
+        } else {
+            telPointingLoss.className = "tel-val text-muted";
+        }
+        
+        telEffectiveEirp.textContent = effectiveEirp.toFixed(1) + ' dBm';
+        telEffectiveEirp.className = pointingLoss > 0 ? "tel-val text-yellow" : "tel-val text-cyan";
+        
+        telRxLevel.textContent = rxLevel.toFixed(1) + ' dBm';
+        telRxLevel.className = rxLevel >= sensitivity ? "tel-val text-cyan" : "tel-val text-red";
         
         telMargin.textContent = margin.toFixed(1) + ' dB';
         telMargin.className = margin >= 0 ? "tel-val text-green" : "tel-val text-red";
@@ -967,10 +1040,15 @@ window.addEventListener('DOMContentLoaded', () => {
             badgeLink.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> FAIL: Link Budget Deficit';
         }
         
+        // Clamp gauge needle value to axis bounds [-10, 40] to prevent overflow
+        const gaugeMargin = Math.max(-10, Math.min(40, parseFloat(margin.toFixed(1))));
         linkChart.setOption({
             series: [{
-                data: [{ value: parseFloat(margin.toFixed(1)), name: 'Link Margin' }],
-                detail: { textStyle: { color: margin >= 0 ? '#10b981' : '#ef4444' } }
+                data: [{ value: gaugeMargin, name: 'Link Margin' }],
+                detail: {
+                    formatter: margin.toFixed(1) + ' dB',
+                    textStyle: { color: margin >= 0 ? '#10b981' : '#ef4444' }
+                }
             }]
         });
         
@@ -1214,6 +1292,15 @@ window.addEventListener('DOMContentLoaded', () => {
         rainSlider.value = 0;
         rainLoss = 0.0;
         rainVal.textContent = '0.0 dB';
+        bwSelect.value = '10';
+        channelBW_MHz = 10;
+        bwVal.textContent = '10 MHz';
+        satRxGainSlider.value = 28.0;
+        satRxGainValue = 28.0;
+        satRxGainValEl.textContent = '28.0 dBi';
+        pointingErrorSlider.value = 0;
+        pointingError = 0.0;
+        pointingErrorValEl.textContent = '0.0°';
         
         // Reset Phased array parameters
         arrayColsSlider.value = 16;
@@ -1292,6 +1379,39 @@ window.addEventListener('DOMContentLoaded', () => {
     rainSlider.addEventListener('input', (e) => {
         rainLoss = parseFloat(e.target.value);
         rainVal.textContent = rainLoss.toFixed(1) + ' dB';
+        if (!isPlaying) {
+            runSimulation(performance.now());
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+    });
+    
+    // Bandwidth Select
+    bwSelect.addEventListener('change', (e) => {
+        channelBW_MHz = parseInt(e.target.value);
+        bwVal.textContent = channelBW_MHz + ' MHz';
+        if (!isPlaying) {
+            runSimulation(performance.now());
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+    });
+    
+    // Sat Rx Antenna Gain Slider
+    satRxGainSlider.addEventListener('input', (e) => {
+        satRxGainValue = parseFloat(e.target.value);
+        satRxGainValEl.textContent = satRxGainValue.toFixed(1) + ' dBi';
+        if (!isPlaying) {
+            runSimulation(performance.now());
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+    });
+    
+    // Pointing Error Slider
+    pointingErrorSlider.addEventListener('input', (e) => {
+        pointingError = parseFloat(e.target.value);
+        pointingErrorValEl.textContent = pointingError.toFixed(1) + '°';
         if (!isPlaying) {
             runSimulation(performance.now());
             cancelAnimationFrame(animationFrameId);
