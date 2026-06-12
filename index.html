@@ -106,17 +106,35 @@
 
             <div class="panel-section">
                 <h3><i class="fa-solid fa-clock"></i> Module 3: Timing Advance</h3>
-                <div class="control-group">
+                <div class="control-group toggle-group">
+                    <span>Enable SIB 19 Ephemeris (Auto TA)</span>
+                    <label class="switch">
+                        <input type="checkbox" id="sib19-toggle">
+                        <span class="slider-toggle"></span>
+                    </label>
+                </div>
+                <div class="control-group sib19-gnss-group disabled-group" id="gnss-error-group">
                     <div class="slider-label">
-                        <span>Timing Advance (TA)</span>
+                        <span>GNSS Position Error</span>
+                        <span id="gnss-error-val" class="mono">0 m</span>
+                    </div>
+                    <input type="range" id="gnss-error-slider" min="0" max="3000" step="10" value="0" disabled>
+                </div>
+                <div class="control-group" id="manual-ta-group">
+                    <div class="slider-label">
+                        <span>Manual Timing Advance (TA)</span>
                         <span id="ta-val" class="mono">4.00 ms</span>
                     </div>
                     <input type="range" id="ta-slider" min="3.5" max="13.5" step="0.01" value="4.0">
                 </div>
                 <div class="control-group" style="margin-top: 0.5rem;">
-                    <div class="info-row">
+                    <div class="info-row" style="border-left-color: var(--neon-magenta);">
                         <span>Required RTT:</span>
                         <span id="required-rtt-info" class="mono">4.00 ms</span>
+                    </div>
+                    <div class="info-row sib19-info-row" id="sib19-ta-info" style="margin-top: 0.25rem; border-left-color: var(--neon-green); display: none;">
+                        <span>SIB 19 Auto TA:</span>
+                        <span id="sib19-ta-val" class="mono">—</span>
                     </div>
                 </div>
             </div>

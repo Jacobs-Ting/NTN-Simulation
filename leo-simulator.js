@@ -51,6 +51,8 @@ window.addEventListener('DOMContentLoaded', () => {
     let satRxGainValue = 28.0; // dBi (Satellite Rx Antenna Peak Gain)
     let pointingError = 0.0; // degrees (mechanical pointing error)
     let selectedTA = 4.0; // ms (Timing Advance)
+    let sib19On = false; // SIB 19 Autonomous TA Pre-compensation
+    let gnssPositionError = 0; // meters (GNSS position error for SIB 19)
     let animationFrameId = null;
     
     // --- DOM Elements ---
@@ -78,6 +80,13 @@ window.addEventListener('DOMContentLoaded', () => {
     const taSlider = document.getElementById('ta-slider');
     const taVal = document.getElementById('ta-val');
     const requiredRttInfo = document.getElementById('required-rtt-info');
+    const sib19Toggle = document.getElementById('sib19-toggle');
+    const gnssErrorSlider = document.getElementById('gnss-error-slider');
+    const gnssErrorVal = document.getElementById('gnss-error-val');
+    const gnssErrorGroup = document.getElementById('gnss-error-group');
+    const manualTaGroup = document.getElementById('manual-ta-group');
+    const sib19TaInfo = document.getElementById('sib19-ta-info');
+    const sib19TaValEl = document.getElementById('sib19-ta-val');
     
     const arrayColsSlider = document.getElementById('array-cols-slider');
     const arrayColsVal = document.getElementById('array-cols-val');
@@ -942,7 +951,25 @@ window.addEventListener('DOMContentLoaded', () => {
         
         // 4. Large RTT & Timing Advance (Module 3)
         const rtt = 2 * (d_sat * 1000) / c * 1000; // in ms
-        const timingOffset = Math.abs(selectedTA - rtt); // ms
+        
+        // SIB 19 Autonomous TA Logic Branch
+        let activeTA;
+        if (sib19On) {
+            // UE autonomously calculates TA from RTT + GNSS position error
+            // TA (ms) = RTT + (2 * (GNSS_Error_m / 1000) / 300)
+            const gnssErrorMs = (2 * (gnssPositionError / 1000) / 300);
+            activeTA = rtt + gnssErrorMs;
+            // Update the manual slider to track (visual feedback only)
+            selectedTA = activeTA;
+            taSlider.value = Math.min(Math.max(activeTA, parseFloat(taSlider.min)), parseFloat(taSlider.max));
+            taVal.textContent = activeTA.toFixed(2) + ' ms';
+            // Update SIB 19 info row
+            sib19TaValEl.textContent = activeTA.toFixed(2) + ' ms';
+        } else {
+            activeTA = selectedTA;
+        }
+        
+        const timingOffset = Math.abs(rtt - activeTA); // ms
         
         // --- Update UI Telemetry Fields ---
         telIdealDoppler.textContent = (fd / 1000).toFixed(2) + ' kHz';
@@ -987,7 +1014,7 @@ window.addEventListener('DOMContentLoaded', () => {
         
         telRtt.textContent = rtt.toFixed(2) + ' ms';
         requiredRttInfo.textContent = rtt.toFixed(2) + ' ms';
-        telTa.textContent = selectedTA.toFixed(2) + ' ms';
+        telTa.textContent = activeTA.toFixed(2) + ' ms';
         telTimingOffset.textContent = timingOffset.toFixed(2) + ' ms';
         telTimingOffset.className = timingOffset <= 0.05 ? "tel-val text-green" : "tel-val text-red";
         
@@ -1053,17 +1080,22 @@ window.addEventListener('DOMContentLoaded', () => {
         });
         
         // Timing Diagram (Module 3) & Badge
-        const hasTimingSync = timingOffset <= 0.05; // 0.05 ms tolerance
+        const hasTimingSync = timingOffset <= 0.05; // 0.05 ms tolerance (cyclic prefix margin)
         if (hasTimingSync) {
-            badgeTiming.className = "status-badge pass";
-            badgeTiming.innerHTML = '<i class="fa-solid fa-circle-check"></i> PASS: Timing Synced';
+            if (sib19On) {
+                badgeTiming.className = "status-badge pass";
+                badgeTiming.innerHTML = '<i class="fa-solid fa-circle-check"></i> PASS: SIB 19 TA SYNCED';
+            } else {
+                badgeTiming.className = "status-badge pass";
+                badgeTiming.innerHTML = '<i class="fa-solid fa-circle-check"></i> PASS: Timing Synced';
+            }
         } else {
             badgeTiming.className = "status-badge fail";
             badgeTiming.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> FAIL: ISI / Slot Collision';
         }
         
         // Draw Timing diagram
-        drawTimingDiagram(ctxTiming, canvasTiming.width / window.devicePixelRatio, canvasTiming.height / window.devicePixelRatio, rtt, selectedTA, timestamp);
+        drawTimingDiagram(ctxTiming, canvasTiming.width / window.devicePixelRatio, canvasTiming.height / window.devicePixelRatio, rtt, activeTA, timestamp);
         
         // Update ThreeJS Rendering
         orbitControls.update();
@@ -1317,10 +1349,22 @@ window.addEventListener('DOMContentLoaded', () => {
         autotrackToggle.checked = true;
         steeringSlider.disabled = true;
         
-        // Reset TA
+        // Reset TA & SIB 19
         selectedTA = 4.0;
         taSlider.value = 4.0;
         taVal.textContent = '4.00 ms';
+        sib19On = false;
+        sib19Toggle.checked = false;
+        gnssPositionError = 0;
+        gnssErrorSlider.value = 0;
+        gnssErrorSlider.disabled = true;
+        gnssErrorVal.textContent = '0 m';
+        gnssErrorGroup.classList.remove('sib19-active');
+        gnssErrorGroup.classList.add('disabled-group');
+        manualTaGroup.classList.remove('sib19-locked');
+        taSlider.disabled = false;
+        sib19TaInfo.style.display = 'none';
+        sib19TaInfo.classList.remove('active');
         
         travelPackets = [];
         
@@ -1419,10 +1463,52 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // TA Slider
+    // TA Slider (manual mode only)
     taSlider.addEventListener('input', (e) => {
-        selectedTA = parseFloat(e.target.value);
-        taVal.textContent = selectedTA.toFixed(2) + ' ms';
+        if (!sib19On) {
+            selectedTA = parseFloat(e.target.value);
+            taVal.textContent = selectedTA.toFixed(2) + ' ms';
+        }
+        if (!isPlaying) {
+            runSimulation(performance.now());
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+    });
+    
+    // SIB 19 Toggle
+    sib19Toggle.addEventListener('change', (e) => {
+        sib19On = e.target.checked;
+        if (sib19On) {
+            // Enable GNSS error slider, disable manual TA slider
+            gnssErrorGroup.classList.add('sib19-active');
+            gnssErrorGroup.classList.remove('disabled-group');
+            gnssErrorSlider.disabled = false;
+            manualTaGroup.classList.add('sib19-locked');
+            taSlider.disabled = true;
+            sib19TaInfo.style.display = 'flex';
+            sib19TaInfo.classList.add('active');
+        } else {
+            // Disable GNSS error slider, enable manual TA slider
+            gnssErrorGroup.classList.remove('sib19-active');
+            gnssErrorGroup.classList.add('disabled-group');
+            gnssErrorSlider.disabled = true;
+            manualTaGroup.classList.remove('sib19-locked');
+            taSlider.disabled = false;
+            sib19TaInfo.style.display = 'none';
+            sib19TaInfo.classList.remove('active');
+        }
+        if (!isPlaying) {
+            runSimulation(performance.now());
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+    });
+    
+    // GNSS Position Error Slider
+    gnssErrorSlider.addEventListener('input', (e) => {
+        gnssPositionError = parseFloat(e.target.value);
+        gnssErrorVal.textContent = gnssPositionError.toFixed(0) + ' m';
         if (!isPlaying) {
             runSimulation(performance.now());
             cancelAnimationFrame(animationFrameId);

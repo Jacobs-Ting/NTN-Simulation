@@ -514,6 +514,57 @@ input:checked + .slider-toggle:before {
 .text-red { color: var(--neon-red); }
 .text-yellow { color: var(--neon-yellow); }
 .text-magenta { color: var(--neon-magenta); }
+.text-orange { color: #f97316; }
+
+/* SIB 19 - Disabled/Active States for GNSS Error Group */
+.disabled-group {
+    opacity: 0.35;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+
+.disabled-group input[type="range"] {
+    filter: grayscale(1);
+}
+
+.sib19-gnss-group.sib19-active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.sib19-gnss-group.sib19-active input[type="range"]::-webkit-slider-thumb {
+    background: var(--neon-green);
+    box-shadow: 0 0 8px var(--neon-green);
+}
+
+/* Manual TA group dimmed when SIB 19 active */
+#manual-ta-group.sib19-locked {
+    opacity: 0.35;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+
+#manual-ta-group.sib19-locked input[type="range"] {
+    filter: grayscale(1);
+}
+
+/* SIB 19 Info Row glow pulse */
+.sib19-info-row {
+    transition: all 0.4s ease;
+}
+
+.sib19-info-row.active {
+    animation: sib19-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes sib19-glow {
+    from {
+        box-shadow: 0 0 4px rgba(16, 185, 129, 0.1);
+    }
+    to {
+        box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+    }
+}
 
 /* Vertical Telemetry (Module 2) */
 .info-details {
